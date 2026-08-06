@@ -1,27 +1,10 @@
 from datetime import datetime
 
-REQUIRED_FIELDS = [
-    "timestamp",
-    "alert_type",
-    "target",
-    "method",
-    "score",
-    "severity",
-    "message",
-    "supporting_values",
-]
-
-ALERT_TYPES = {
-    "anomaly",
-    "correlation",
-}
-
-SEVERITY_LEVELS = {
-    "low",
-    "medium",
-    "high",
-    "critical",
-}
+from analytics_integration.v1_schema import (
+    ALERT_TYPES,
+    REQUIRED_FIELDS,
+    SEVERITY_LEVELS,
+)
 
 
 def is_iso8601(value):
@@ -59,10 +42,14 @@ def validate_response(response):
     if "target" in response:
         if not isinstance(response["target"], str):
             errors.append("target must be a string")
+        elif not response["target"].strip():
+            errors.append("target must not be empty")
 
     if "method" in response:
         if not isinstance(response["method"], str):
             errors.append("method must be a string")
+        elif not response["method"].strip():
+            errors.append("method must not be empty")
 
     if "score" in response:
         if isinstance(response["score"], bool) or not isinstance(
@@ -81,6 +68,8 @@ def validate_response(response):
     if "message" in response:
         if not isinstance(response["message"], str):
             errors.append("message must be a string")
+        elif not response["message"].strip():
+            errors.append("message must not be empty")
 
     if "supporting_values" in response:
         if not isinstance(response["supporting_values"], dict):
