@@ -10,5 +10,6 @@
     "humidity": 65.2
   },
   "method": "Pearson",
-  "time_window": 10
+  "time_window": 30,
+  "step_size": 5
 }
