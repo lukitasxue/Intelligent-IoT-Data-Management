@@ -6,6 +6,9 @@ const dotenv = require('dotenv');
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const mockRoutes = require('./routes/mock');
+const apiRouter = require('./routes');
+const authRoutes = require('./routes/auth');
+const thingSpeakRoutes = require('./routes/thingspeak');
 
 const app = express();
 
@@ -24,6 +27,9 @@ app.get('/health', (req, res) => {
   });
 });
 
+app.use('/api', apiRouter);
+app.use('/api', authRoutes);
 app.use('/api', mockRoutes);
+app.use('/api', thingSpeakRoutes);
 
 module.exports = app;
