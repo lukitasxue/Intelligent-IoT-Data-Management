@@ -1,8 +1,7 @@
 # Backend Analytics Integration Handover
 
 **Status:** Week 7 – In Progress
-**Owner:** Parkhi – Analytics Integration
-**Related Area:** Backend Readiness & Analytics Contract
+**Related Area:** Backend Handover Document
 
 ## 1. Purpose
 
