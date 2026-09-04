@@ -353,29 +353,19 @@ const Dashboard = ({ datasetId }) => {
       <section className="dashboard-section insights-panel">
         <h3 className="section-title">Insight Cards</h3>
 
-        {streamCount === 0 && (
+        {streamCount === 0 ? (
           <div className="empty-state">
             Please select one or more streams to view summary insights and charts.
           </div>
-        )}
-
-        {streamCount > 0 && (
+        ) : (
           <div className="stream-stats">
-            {selectedStreams.map((stream) => (
-              <StreamStats key={stream} data={filteredData} stream={stream} />
+           {selectedStreams.map((stream) => (
+             <StreamStats
+               key={stream}
+               data={filteredData}
+               stream={stream}
+            />
             ))}
-
-            {correlationSummary && (
-              <div className="insight-card correlation-card">
-                <div className="insight-card-header">
-                  <span className="insight-label">Correlation</span>
-                  <h3 className="insight-stream-name">{correlationSummary.streams}</h3>
-                </div>
-
-                <div className="correlation-value">{correlationSummary.value}</div>
-                <p className="correlation-text">{correlationSummary.label}</p>
-              </div>
-            )}
           </div>
         )}
       </section>
