@@ -7,6 +7,8 @@ const apiRoutes = require("./routes");
 const authRoutes = require("./routes/auth");
 const thingSpeakRoutes = require("./routes/thingspeak");
 
+const jsonLimit = process.env.JSON_BODY_LIMIT || "25mb";
+
 function cookieParser(req, _res, next) {
   req.cookies = Object.fromEntries(
     (req.headers.cookie || "")
@@ -38,7 +40,7 @@ function createApp() {
     }),
   );
 
-  app.use(express.json());
+  app.use(express.json({ limit: jsonLimit }));
   app.use(cookieParser);
 
   app.get("/", (_req, res) => {
