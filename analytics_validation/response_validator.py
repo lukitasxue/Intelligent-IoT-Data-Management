@@ -1,33 +1,10 @@
 from datetime import datetime
 
-REQUIRED_ALERT_FIELDS = [
-    "timestamp",
-    "alert_type",
-    "target",
-    "method",
-    "message",
-    "source",
-]
-
-OPTIONAL_ALERT_FIELDS = [
-    "score",
-    "score_metadata",
-    "severity",
-    "time_window",
-    "supporting_values",
-    "alert_id",
-]
-
-ALERT_TYPES = {
-    "POINTWISE_ANOMALY",
-    "CORRELATION_CHANGE",
-}
-
-SEVERITY_LEVELS = {
-    "LOW",
-    "MEDIUM",
-    "HIGH",
-}
+from analytics_integration.v1_schema import (
+    ALERT_TYPES,
+    REQUIRED_FIELDS,
+    SEVERITY_LEVELS,
+)
 
 
 def is_iso8601_utc(value):
@@ -199,38 +176,45 @@ def validate_response(response):
         if field not in response:
             errors.append(f"{field} is required")
 
-    if errors:
-        return errors
+    if "timestamp" in response:
+        if not isinstance(response["timestamp"], str):
+            errors.append("timestamp must be a string")
+        elif not is_iso8601(response["timestamp"]):
+            errors.append("Invalid ISO 8601 timestamp")
 
-    if response["status"] not in {"success", "error"}:
-        errors.append("status must be success or error")
+    if "alert_type" in response:
+        if not isinstance(response["alert_type"], str):
+            errors.append("alert_type must be a string")
+        elif response["alert_type"] not in ALERT_TYPES:
+            errors.append(
+                f"Unsupported alert type: {response['alert_type']}"
+            )
 
-    if not is_iso8601_utc(response["generated_at"]):
-        errors.append("generated_at must be a valid ISO 8601 UTC timestamp")
+    if "target" in response:
+        if not isinstance(response["target"], str):
+            errors.append("target must be a string")
 
-    if not isinstance(response["alerts"], list):
-        errors.append("alerts must be a list")
-    else:
-        for index, alert in enumerate(response["alerts"]):
-            alert_errors = validate_alert(alert)
+    if "method" in response:
+        if not isinstance(response["method"], str):
+            errors.append("method must be a string")
 
-            for error in alert_errors:
-                errors.append(f"alerts[{index}].{error}")
+    if "score" in response:
+        if isinstance(response["score"], bool) or not isinstance(
+            response["score"], (int, float)
+        ):
+            errors.append("score must be numeric")
 
-    if not isinstance(response["summary"], dict):
-        errors.append("summary must be an object")
-    else:
-        summary = response["summary"]
+    if "severity" in response:
+        if not isinstance(response["severity"], str):
+            errors.append("severity must be a string")
+        elif response["severity"] not in SEVERITY_LEVELS:
+            errors.append(
+                f"Unsupported severity: {response['severity']}"
+            )
 
-        if "processed_items" not in summary:
-            errors.append("summary.processed_items is required")
-        elif not isinstance(summary["processed_items"], int):
-            errors.append("summary.processed_items must be an integer")
-
-        if "alert_count" not in summary:
-            errors.append("summary.alert_count is required")
-        elif not isinstance(summary["alert_count"], int):
-            errors.append("summary.alert_count must be an integer")
+    if "message" in response:
+        if not isinstance(response["message"], str):
+            errors.append("message must be a string")
 
     if not isinstance(response["errors"], list):
         errors.append("errors must be a list")
