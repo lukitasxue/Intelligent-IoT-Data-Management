@@ -1,35 +1,81 @@
-const path = require('path');
-const express = require('express');
-const cors = require('cors');
-const dotenv = require('dotenv');
+const express = require("express");
+const cors = require("cors");
 
-dotenv.config({ path: path.resolve(__dirname, '../.env') });
+const { assertProductionAuthConfig } = require("./config/authConfig");
 
-const mockRoutes = require('./routes/mock');
-const apiRouter = require('./routes');
-const authRoutes = require('./routes/auth');
-const thingSpeakRoutes = require('./routes/thingspeak');
+const apiRoutes = require("./routes");
+const authRoutes = require("./routes/auth");
+const thingSpeakRoutes = require("./routes/thingspeak");
 
-const app = express();
+function cookieParser(req, _res, next) {
+  req.cookies = Object.fromEntries(
+    (req.headers.cookie || "")
+      .split(";")
+      .filter(Boolean)
+      .map((part) => {
+        const i = part.indexOf("=");
+        return [
+          part.slice(0, i).trim(),
+          decodeURIComponent(part.slice(i + 1)),
+        ];
+      }),
+  );
 
-app.use(cors());
-app.use(express.json());
+  next();
+}
 
-app.get('/', (req, res) => {
-  res.send('Backend is running');
-});
+function createApp() {
+  assertProductionAuthConfig();
 
-app.get('/health', (req, res) => {
-  res.status(200).json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    uptimeSeconds: process.uptime()
+  const app = express();
+
+  const origin = process.env.FRONTEND_ORIGIN;
+
+  app.use(
+    cors({
+      origin: origin ? origin.split(",") : true,
+      credentials: true,
+    }),
+  );
+
+  app.use(express.json());
+  app.use(cookieParser);
+
+  app.get("/", (_req, res) => {
+    res.send("Backend is running");
   });
-});
 
-app.use('/api', apiRouter);
-app.use('/api', authRoutes);
-app.use('/api', mockRoutes);
-app.use('/api', thingSpeakRoutes);
+  app.get("/health", (_req, res) => {
+    res.json({
+      status: "ok",
+      timestamp: new Date().toISOString(),
+      uptimeSeconds: process.uptime(),
+    });
+  });
 
-module.exports = app;
+  app.get("/ready", (_req, res) =>
+    process.env.NODE_ENV === "production" && !process.env.JWT_SECRET
+      ? res.status(503).json({
+          error: {
+            code: "READY_DEPENDENCY_UNAVAILABLE",
+            message: "Authentication configuration is unavailable.",
+          },
+        })
+      : res.json({ status: "ready" }),
+  );
+
+  // Main Backend routes:
+  // analyse, datasets, series, timestamps, mocks
+  app.use("/api", apiRoutes);
+
+  // Authentication routes
+  app.use("/api", authRoutes);
+
+  // ThingSpeak live-data routes
+  app.use("/api", thingSpeakRoutes);
+
+  return app;
+}
+
+module.exports = createApp();
+module.exports.createApp = createApp;
