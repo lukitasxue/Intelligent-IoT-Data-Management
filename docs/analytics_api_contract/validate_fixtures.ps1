@@ -21,10 +21,43 @@ foreach ($file in $files) {
         $null -eq $json.errors
     ) {
         Write-Host "FAILED - Missing required response fields"
+        continue
     }
-    else {
-        Write-Host "VALID - Response structure is correct"
+
+    if ($json.status -isnot [string]) {
+        Write-Host "FAILED - status must be a string"
+        continue
     }
+
+    if ($json.generated_at -isnot [string]) {
+        Write-Host "FAILED - generated_at must be a string"
+        continue
+    }
+
+    if ($json.alerts -isnot [array]) {
+        Write-Host "FAILED - alerts must be an array"
+        continue
+    }
+
+    if ($json.summary -isnot [pscustomobject]) {
+        Write-Host "FAILED - summary must be an object"
+        continue
+    }
+
+    if ($json.errors -isnot [array]) {
+        Write-Host "FAILED - errors must be an array"
+        continue
+    }
+
+    if (
+        $json.summary.processed_items -isnot [int] -or
+        $json.summary.alert_count -isnot [int]
+    ) {
+        Write-Host "FAILED - summary values must be numbers"
+        continue
+    }
+
+    Write-Host "VALID - Response fields and types are correct"
 }
 
 $single = Get-Content "$folder/single_sensor_response.json" -Raw | ConvertFrom-Json
@@ -47,6 +80,24 @@ if ($multi.alerts[0].alert_type -eq "CORRELATION_CHANGE") {
 else {
     Write-Host "FAILED - Multi sensor alert type"
 }
+
+Write-Host "`nChecking alert_type field type"
+
+if ($single.alerts[0].alert_type -is [string]) {
+    Write-Host "VALID - Single sensor alert_type is a string"
+}
+else {
+    Write-Host "FAILED - Single sensor alert_type must be a string"
+}
+
+if ($multi.alerts[0].alert_type -is [string]) {
+    Write-Host "VALID - Multi sensor alert_type is a string"
+}
+else {
+    Write-Host "FAILED - Multi sensor alert_type must be a string"
+}
+
+Write-Host "`nChecking response rules"
 
 if ($noAlert.status -eq "success" -and $noAlert.summary.alert_count -eq 0) {
     Write-Host "VALID - No-alert response"
