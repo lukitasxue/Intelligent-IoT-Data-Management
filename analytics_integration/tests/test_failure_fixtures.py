@@ -88,14 +88,14 @@ def test_reusable_fixture_correlation_failure(
 
 
 def test_reusable_empty_fixture_is_success(
-    empty_alert_fixture,
+    empty_alerts_fixture,
 ):
     """Empty outputs from both services should still be a valid success."""
 
     envelope, http = build_response_with_failures(
         processed_items=20,
-        models_call=lambda: empty_alert_fixture,
-        correlation_call=lambda: empty_alert_fixture,
+        models_call=lambda: empty_alerts_fixture,
+        correlation_call=lambda: empty_alerts_fixture,
     )
 
     assert http == 200
