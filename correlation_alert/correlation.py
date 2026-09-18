@@ -5,6 +5,11 @@ import pandas as pd
 from .preprocessing import InputValidationError
 
 
+class InsufficientCorrelationDataError(InputValidationError):
+    """Valid input that cannot produce enough correlation analysis."""
+
+
+
 DEFAULT_WINDOW_SIZE = 20
 DEFAULT_STEP_SIZE = 10
 DEFAULT_METHOD = "pearson"
@@ -51,7 +56,9 @@ def validate_correlation_parameters(
     _require_positive_integer(window_size, "window_size")
     _require_positive_integer(step_size, "step_size")
     if row_count is not None and window_size > row_count:
-        raise InputValidationError("window_size cannot exceed the number of processed rows")
+        raise InsufficientCorrelationDataError(
+            "window_size cannot exceed the number of processed rows"
+        )
     if method not in VALID_METHODS:
         raise InputValidationError(f"method must be one of {sorted(VALID_METHODS)}")
 
@@ -72,7 +79,9 @@ def create_rolling_windows(df, window_size, step_size):
     _require_positive_integer(window_size, "window_size")
     _require_positive_integer(step_size, "step_size")
     if window_size > len(df):
-        raise InputValidationError("window_size cannot exceed the number of processed rows")
+        raise InsufficientCorrelationDataError(
+            "window_size cannot exceed the number of processed rows"
+        )
 
     return [
         df.iloc[start : start + window_size]
@@ -253,8 +262,15 @@ def run_correlation_pipeline(
         high_threshold,
         row_count=len(processed_data),
     )
-    windows = create_rolling_windows(processed_data, window_size, step_size)
-    correlation_results = compute_window_correlations(windows, method)
+    windows = create_rolling_windows(
+        processed_data,
+        window_size,
+        step_size,
+    )
+    correlation_results = compute_window_correlations(
+        windows,
+        method,
+    )
     changes, skipped_pairs = compare_correlation_changes(correlation_results)
     alerts = generate_alerts(
         changes,
