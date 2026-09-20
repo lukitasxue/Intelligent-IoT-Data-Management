@@ -5,3 +5,4 @@ seaborn
 flask
 flask-cors
 requests
+orjson>=3.9.0
