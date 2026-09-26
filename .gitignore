@@ -17,6 +17,8 @@ __pycache__/
 *.pyc
 .ipynb_checkpoints/
 **/.ipynb_checkpoints/
+.venv/
+venv/
 
 # Editor directories and files
 .vscode/*
@@ -45,3 +47,4 @@ data_science/outputs/*.png
 .env.development.local
 .env.test.local
 .env.production.local
+venv/

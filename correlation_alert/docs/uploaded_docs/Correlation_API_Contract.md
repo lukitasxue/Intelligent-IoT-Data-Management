@@ -297,3 +297,23 @@ the Postman form-data request was configured incorrectly.
 Fix: The file field was changed to the File type, simple.csv was
 uploaded correctly, and the request was sent again. The API then
 processed the dataset successfully and returned HTTP 200 OK.
+
+
+## CCA117 Structured Validation Responses
+
+The Correlation Alert API validates caller-controlled input before analysis and returns stable machine-readable error codes.
+
+| HTTP | Error Code | Meaning |
+| --- | --- | --- |
+| 400 | `INVALID_REQUEST` | Missing or malformed request body |
+| 400 | `INVALID_FILE_TYPE` | Unsupported uploaded file type |
+| 400 | `INVALID_CSV` | Empty or unreadable CSV |
+| 400 | `MISSING_TIMESTAMP_COLUMN` | Timestamp column is missing |
+| 400 | `INVALID_STREAMS` | Selected streams are invalid or missing |
+| 400 | `INVALID_METHOD` | Unsupported correlation method |
+| 400 | `INVALID_CONFIGURATION` | Invalid correlation configuration |
+| 400 | `FILE_TOO_LARGE` | Request exceeds the 5 MB limit |
+| 422 | `INSUFFICIENT_DATA` | Valid input cannot produce a correlation window |
+| 500 | `INTERNAL_ERROR` | Unexpected internal service error |
+
+One valid rolling window is sufficient to calculate a correlation matrix and therefore remains a successful HTTP 200 response. A successful analysis with no alerts also returns HTTP 200 with an empty `alerts` array.

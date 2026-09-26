@@ -1,10 +1,76 @@
 const thingspeakRepository = require('../repositories/thingspeakRepository');
 const pool = require('../db/pool');
 const TimeseriesRepository = require('../repositories/timeseriesRepository');
+const datasetRepository = require('../repositories/datasetRepository');
+const { mappingsForChannel } = require('./thingSpeakFieldMappings');
 
 const timeseriesRepository = new TimeseriesRepository();
 const THINGSPEAK_DATASET_NAME =
   process.env.THINGSPEAK_DATASET_NAME || 'thingspeak-live';
+
+function configuredChannelId() {
+  const channelId = String(process.env.THINGSPEAK_CHANNEL_ID || '').trim();
+
+  if (!channelId) {
+    throw new Error('THINGSPEAK_CHANNEL_ID is missing in .env');
+  }
+
+  if (!mappingsForChannel(channelId)) {
+    throw new Error(
+      `No Backend field mapping is configured for ThingSpeak channel ${channelId}`
+    );
+  }
+
+  return channelId;
+}
+
+async function getThingSpeakDatasetOwnerId() {
+  const ownerId = process.env.THINGSPEAK_DATASET_OWNER_ID;
+
+  if (!ownerId) {
+    throw new Error(
+      'THINGSPEAK_DATASET_OWNER_ID is required to store a ThingSpeak dataset.'
+    );
+  }
+
+  const ownerResult = await pool.query(
+    'SELECT id FROM auth_users WHERE id = $1',
+    [ownerId]
+  );
+
+  if (ownerResult.rows.length === 0) {
+    throw new Error(
+      'THINGSPEAK_DATASET_OWNER_ID must reference an existing auth_users record. Run npm run migrate:thingspeak-owner first.'
+    );
+  }
+
+  return ownerId;
+}
+
+async function ensureThingSpeakDataset(channelId = configuredChannelId()) {
+  const ownerId = await getThingSpeakDatasetOwnerId();
+
+  const datasetResult = await pool.query(
+    `INSERT INTO datasets (name, created_by, updated_by)
+     VALUES ($1, $2, $2)
+     ON CONFLICT (created_by, name) WHERE deleted_at IS NULL
+     DO UPDATE SET
+       updated_by = EXCLUDED.updated_by,
+       updated_at = CURRENT_TIMESTAMP
+     RETURNING id`,
+    [THINGSPEAK_DATASET_NAME, ownerId]
+  );
+
+  const dataset = datasetResult.rows[0];
+
+  await datasetRepository.ensureSystemMappings(
+    dataset.id,
+    mappingsForChannel(channelId),
+  );
+
+  return dataset;
+}
+
 
 const getThingSpeakFeeds = async () => {
   //const rawData = await thingspeakRepository.getMockThingSpeakData();
@@ -62,15 +128,16 @@ const saveThingSpeakRawDataToDatabase = async (rawData) => {
     return 0;
   }
 
-  const datasetResult = await pool.query(
-    `INSERT INTO datasets (name)
-     VALUES ($1)
-     ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
-     RETURNING id`,
-    [THINGSPEAK_DATASET_NAME]
-  );
+  const configuredChannel = configuredChannelId();
+  const responseChannel = rawData?.channel?.id;
+  if (responseChannel !== undefined && String(responseChannel) !== configuredChannel) {
+    throw new Error(
+      `ThingSpeak response channel ${responseChannel} does not match configured channel ${configuredChannel}`,
+    );
+  }
 
-  const datasetId = datasetResult.rows[0].id;
+  const dataset = await ensureThingSpeakDataset(configuredChannel);
+  const datasetId = dataset.id;
 
   const metricKeys = Object.keys(feeds[0]).filter((key) =>
     key.startsWith('field')
@@ -199,6 +266,7 @@ const startThingSpeakPolling = () => {
 };
 
 module.exports = {
+  ensureThingSpeakDataset,
   getThingSpeakFeeds,
   startThingSpeakPolling,
   fetchThingSpeakWithRetry,

@@ -318,3 +318,205 @@ def test_startup_log_reports_active_operational_settings():
     assert "service_url=http://correlation.test" in log_text
     assert "timeout_seconds=25" in log_text
     assert "log_level=INFO" in log_text
+
+
+# ---------------------------------------------------------------------------
+# CCA117 - API validation and predictable error handling
+# ---------------------------------------------------------------------------
+
+
+def test_empty_request_returns_structured_400():
+    client = create_app().test_client()
+
+    response = client.post(
+        "/detect-correlation-alert"
+    )
+
+    body = response.get_json()
+
+    assert response.status_code == 400
+    assert body["status"] == "error"
+    assert body["error_type"] == "invalid_input"
+    assert body["error_code"] == "INVALID_REQUEST"
+
+
+def test_non_csv_upload_returns_structured_400():
+    client = create_app().test_client()
+
+    response = client.post(
+        "/detect-correlation-alert",
+        data={
+            "file": (
+                BytesIO(b"not-a-csv"),
+                "sensors.txt",
+            ),
+            "timestamp_col": "time",
+            "selected_streams": "s1,s2",
+        },
+        content_type="multipart/form-data",
+    )
+
+    body = response.get_json()
+
+    assert response.status_code == 400
+    assert body["error_code"] == "INVALID_FILE_TYPE"
+
+
+def test_empty_csv_returns_structured_400():
+    client = create_app().test_client()
+
+    response = client.post(
+        "/detect-correlation-alert",
+        data={
+            "file": (
+                BytesIO(b""),
+                "empty.csv",
+            ),
+            "timestamp_col": "time",
+            "selected_streams": "s1,s2",
+        },
+        content_type="multipart/form-data",
+    )
+
+    body = response.get_json()
+
+    assert response.status_code == 400
+    assert body["error_code"] == "INVALID_CSV"
+
+
+def test_missing_timestamp_column_returns_structured_400():
+    client = create_app().test_client()
+
+    csv_data = (
+        b"time,s1,s2\n"
+        b"1,10,20\n"
+        b"2,11,21\n"
+        b"3,12,22\n"
+        b"4,13,23\n"
+    )
+
+    response = client.post(
+        "/detect-correlation-alert",
+        data={
+            "file": (
+                BytesIO(csv_data),
+                "sensors.csv",
+            ),
+            "timestamp_col": "wrong_time",
+            "selected_streams": "s1,s2",
+        },
+        content_type="multipart/form-data",
+    )
+
+    body = response.get_json()
+
+    assert response.status_code == 400
+    assert (
+        body["error_code"]
+        == "MISSING_TIMESTAMP_COLUMN"
+    )
+
+
+def test_missing_selected_stream_returns_structured_400():
+    client = create_app().test_client()
+
+    csv_data = (
+        b"time,s1,s2\n"
+        b"1,10,20\n"
+        b"2,11,21\n"
+        b"3,12,22\n"
+        b"4,13,23\n"
+    )
+
+    response = client.post(
+        "/detect-correlation-alert",
+        data={
+            "file": (
+                BytesIO(csv_data),
+                "sensors.csv",
+            ),
+            "timestamp_col": "time",
+            "selected_streams": "s1,missing_sensor",
+        },
+        content_type="multipart/form-data",
+    )
+
+    body = response.get_json()
+
+    assert response.status_code == 400
+    assert body["error_code"] == "INVALID_STREAMS"
+
+
+def test_single_selected_stream_returns_structured_400():
+    client = create_app().test_client()
+
+    csv_data = (
+        b"time,s1,s2\n"
+        b"1,10,20\n"
+        b"2,11,21\n"
+        b"3,12,22\n"
+        b"4,13,23\n"
+    )
+
+    response = client.post(
+        "/detect-correlation-alert",
+        data={
+            "file": (
+                BytesIO(csv_data),
+                "sensors.csv",
+            ),
+            "timestamp_col": "time",
+            "selected_streams": "s1",
+        },
+        content_type="multipart/form-data",
+    )
+
+    body = response.get_json()
+
+    assert response.status_code == 400
+    assert body["error_code"] == "INVALID_STREAMS"
+
+
+def test_window_larger_than_dataset_returns_422():
+    client = create_app().test_client()
+
+    payload = _payload(0.6)
+    payload["window_size"] = 100
+
+    response = client.post(
+        "/detect-correlation-alert",
+        json=payload,
+    )
+
+    body = response.get_json()
+
+    assert response.status_code == 422
+    assert body["status"] == "error"
+    assert body["error_code"] == "INSUFFICIENT_DATA"
+
+
+def test_oversized_upload_returns_structured_error():
+    client = create_app().test_client()
+
+    oversized_content = (
+        b"a" * (5 * 1024 * 1024 + 1024)
+    )
+
+    response = client.post(
+        "/detect-correlation-alert",
+        data={
+            "file": (
+                BytesIO(oversized_content),
+                "large.csv",
+            ),
+            "timestamp_col": "time",
+            "selected_streams": "s1,s2",
+        },
+        content_type="multipart/form-data",
+    )
+
+    body = response.get_json()
+
+    assert response.status_code == 400
+    assert body["status"] == "error"
+    assert body["error_code"] == "FILE_TOO_LARGE"
