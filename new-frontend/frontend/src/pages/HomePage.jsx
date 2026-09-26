@@ -1,38 +1,9 @@
+import { useState } from "react";
 import DatasetCard from "../components/DatasetCard";
+import UploadDatasetCard from "../components/UploadDatasetCard";
+import UploadDatasetDialog from "../components/UploadDatasetDialog";
+import { useDatasets } from "../hooks/useDatasets";
 import "./HomePage.css";
-
-const datasets = [
-  {
-    id: "sensor1",
-    name: "Environmental Sensor",
-    icon: "🌡️",
-    description:
-      "Collects temperature and humidity data over time, enabling analysis of environmental trends and conditions.",
-    streams: 3,
-    lastUpdated: "Today",
-    status: "Available",
-  },
-  {
-    id: "sensor2",
-    name: "Multi-Stream Sensor",
-    icon: "📊",
-    description:
-      "Captures multiple sensor streams simultaneously, supporting comparison and correlation between different variables.",
-    streams: 4,
-    lastUpdated: "Today",
-    status: "Available",
-  },
-  {
-    id: "sensor3",
-    name: "IoT Monitoring Sensor",
-    icon: "📡",
-    description:
-      "Provides real-time IoT sensor data used for dashboard testing, system validation, and visualisation of streaming data.",
-    streams: 3,
-    lastUpdated: "Today",
-    status: "Available",
-  },
-];
 
 const features = [
   {
@@ -53,6 +24,60 @@ const features = [
 ];
 
 const HomePage = () => {
+  const {
+  datasets,
+  loading,
+  error,
+  refreshDatasets,
+} = useDatasets();
+  const [showUploadDialog,setShowUploadDialog] = useState(false);
+  const streamCount = datasets.reduce(
+    (total, dataset) => total + Number(dataset.streams || 0),
+    0,
+  );
+
+  const renderDatasets = () => {
+    if (loading) {
+      return (
+        <div className="homepage__dataset-state" role="status">
+          <span className="homepage__spinner" aria-hidden="true"></span>
+          <h3>Loading datasets</h3>
+          <p>Please wait while the dataset library is prepared.</p>
+        </div>
+      );
+    }
+
+    if (error) {
+      return (
+        <div className="homepage__dataset-state homepage__dataset-state--error" role="alert">
+          <h3>Unable to load datasets</h3>
+          <p>Please refresh the page or try again later.</p>
+        </div>
+      );
+    }
+
+    if (datasets.length === 0) {
+      return (
+        <div className="homepage__dataset-state">
+          <h3>No datasets available</h3>
+          <p>New sensor datasets will appear here when they are added.</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="homepage__grid">
+        {datasets.map((dataset) => (
+          <DatasetCard key={dataset.id} {...dataset} />
+        ))}
+
+        <UploadDatasetCard
+        onClick={() => setShowUploadDialog(true)}
+         />
+      </div>
+    );
+  };
+
   return (
     <>
       <main className="homepage">
@@ -90,11 +115,11 @@ const HomePage = () => {
 
             <div className="homepage__stats-grid">
               <div className="homepage__stat-card">
-                <strong>3</strong>
+                <strong>{loading ? "—" : datasets.length}</strong>
                 <span>Datasets</span>
               </div>
               <div className="homepage__stat-card">
-                <strong>10+</strong>
+                <strong>{loading ? "—" : streamCount}</strong>
                 <span>Streams</span>
               </div>
               <div className="homepage__stat-card">
@@ -125,11 +150,7 @@ const HomePage = () => {
             </p>
           </div>
 
-          <div className="homepage__grid">
-            {datasets.map((dataset) => (
-              <DatasetCard key={dataset.id} {...dataset} />
-            ))}
-          </div>
+          {renderDatasets()}
         </section>
 
         <section className="homepage__features" id="platform-info">
@@ -140,6 +161,15 @@ const HomePage = () => {
             </div>
           ))}
         </section>
+
+        {showUploadDialog && (
+          <UploadDatasetDialog
+            onClose={() => {
+              setShowUploadDialog(false);
+              refreshDatasets();
+            }}
+          />
+          )}
       </main>
     </>
   );
