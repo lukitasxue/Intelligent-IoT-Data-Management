@@ -17,6 +17,9 @@ def adapt_correlation_response(raw_response: dict, request_context: dict = None)
 
     adapted_alerts = []
     
+    # Allowed strict severity enums
+    ALLOWED_SEVERITIES = {"LOW", "MEDIUM", "HIGH"}
+
     # 3. Process alerts using Tommy's primary field names
     raw_alerts = raw_response.get("alerts", [])
     for item in raw_alerts:
@@ -33,41 +36,53 @@ def adapt_correlation_response(raw_response: dict, request_context: dict = None)
         curr_corr = item.get("current_corr") if "current_corr" in item else item.get("current_correlation")
         delta_val = item.get("delta") if "delta" in item else item.get("correlation_delta")
         
-        alert_level = item.get("alert_level") or item.get("severity")
+        # Strictly format severity to ("LOW", "MEDIUM", "HIGH") or fallback to None
+        raw_level = item.get("alert_level") or item.get("severity")
+        if isinstance(raw_level, str) and raw_level.upper() in ALLOWED_SEVERITIES:
+            alert_level = raw_level.upper()
+        else:
+            alert_level = None
+
         msg = item.get("reason") or item.get("message") or f"Correlation between {metric_1} and {metric_2} changed by {delta_val}."
         win_idx = item.get("window_index")
+
+        # Set time_window to None if timestamp bounds are missing
+        if time_start and time_end:
+            time_window = {
+                "start": time_start,
+                "end": time_end,
+                "window_size": window_size,
+                "step_size": step_size,
+            }
+        else:
+            time_window = None
 
         alert_obj = {
             "timestamp": time_end,
             "alert_type": "CORRELATION_CHANGE",
             "target": {
                 "entity_id": item.get("entity_id", None),
-                "metrics": [metric_1, metric_2]
+                "metrics": [metric_1, metric_2],
             },
             "method": method,
             "score": delta_val,
             "score_metadata": {
                 "type": "absolute_correlation_delta",
-                "normalized": False
+                "normalized": False,
             },
             "severity": alert_level,
             "message": msg,
-            "time_window": {
-                "start": time_start,
-                "end": time_end,
-                "window_size": window_size,
-                "step_size": step_size
-            },
+            "time_window": time_window,
             "supporting_values": {
                 "previous_correlation": prev_corr,
                 "current_correlation": curr_corr,
                 "delta": delta_val,
-                "window_index": win_idx
+                "window_index": win_idx,
             },
             "source": {
-                "component": "correlation"
+                "component": "correlation",
             },
-            "alert_id": None
+            "alert_id": None,
         }
         adapted_alerts.append(alert_obj)
 

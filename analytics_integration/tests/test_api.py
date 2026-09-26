@@ -235,3 +235,35 @@ def test_invalid_correlation_method_returns_400():
     )
 
     assert response.status_code == 400
+
+
+def test_malformed_json_returns_400():
+    """Verifies that orjson catches unparseable byte streams cleanly."""
+    client = _client()
+
+    response = client.post(
+        "/analytics/analyze",
+        data="INVALID_JSON_BYTES",
+        content_type="application/json",
+    )
+
+    assert response.status_code == 400
+    body = response.get_json()
+    assert body["status"] == "error"
+    assert body["errors"][0]["code"] == "INVALID_REQUEST"
+
+
+def test_empty_request_body_returns_400():
+    """Verifies empty HTTP request payloads trigger an INVALID_REQUEST response."""
+    client = _client()
+
+    response = client.post(
+        "/analytics/analyze",
+        data="",
+        content_type="application/json",
+    )
+
+    assert response.status_code == 400
+    body = response.get_json()
+    assert body["status"] == "error"
+    assert body["errors"][0]["code"] == "INVALID_REQUEST"

@@ -13,12 +13,15 @@ sensor names.
 from __future__ import annotations
 
 import json
+import logging
 
 import pandas as pd
 
 from data_science.input_validator import validate_input
 from data_science.detector_runner import run_detector
-from data_science.adapters.models_output_adapter import (adapt_models_output,)
+from data_science.adapters.models_output_adapter import (
+    adapt_models_output,
+)
 
 from correlation_alert.server import create_app
 
@@ -32,6 +35,28 @@ from analytics_validation.response_validator import (
     validate_alert,
     validate_response,
 )
+
+logger = logging.getLogger(__name__)
+
+
+def build_error_response(
+    error_code: str,
+    message: str,
+    processed_items: int = 0,
+) -> dict:
+    """
+    Guarantees a standard JSON error envelope structure for the frontend.
+    Prevents silent failures and blank screens when exceptions occur.
+    """
+    return {
+        "status": "ERROR",
+        "error_code": error_code,
+        "message": message,
+        "alerts": [],
+        "metadata": {
+            "processed_items": processed_items,
+        },
+    }
 
 
 def _require_columns(
@@ -258,16 +283,35 @@ def run_analytics_pipeline(
 ) -> dict:
     """
     Execute the complete reusable Analytics Intelligence path.
+    
+    If `safe_mode` is True, exceptions raised during validation or engine
+    execution are caught and wrapped into a standardized error response
+    envelope instead of throwing uncaught exceptions to the client.
     """
 
-    if not isinstance(df, pd.DataFrame):
-        raise TypeError(
-            "df must be a pandas DataFrame."
+    try:
+        if not isinstance(df, pd.DataFrame):
+            raise TypeError("df must be a pandas DataFrame.")
+
+        if df.empty:
+            raise ValueError("Input data contains no rows.")
+
+        models_alerts, _ = run_models_path(
+            df=df,
+            timestamp_col=timestamp_col,
+            model_metric=model_metric,
+            entity_id=entity_id,
+            detector_name=detector_name,
+            detector_parameters=detector_parameters,
         )
 
-    if df.empty:
-        raise ValueError(
-            "Input data contains no rows."
+        correlation_alerts, _ = run_correlation_path(
+            df=df,
+            timestamp_col=timestamp_col,
+            correlation_streams=correlation_streams,
+            window_size=correlation_window_size,
+            step_size=correlation_step_size,
+            method=correlation_method,
         )
 
     models_alerts, _ = run_models_path(
@@ -280,32 +324,47 @@ def run_analytics_pipeline(
         model_metrics=model_metrics,
     )
 
-    correlation_alerts, _ = run_correlation_path(
-        df=df,
-        timestamp_col=timestamp_col,
-        correlation_streams=correlation_streams,
-        window_size=correlation_window_size,
-        step_size=correlation_step_size,
-        method=correlation_method,
-    )
-
-    final_response = build_analytics_response(
-        models_alerts=models_alerts,
-        correlation_alerts=correlation_alerts,
-        processed_items=len(df),
-    )
-
-    validation_errors = validate_response(
-        final_response
-    )
-
-    if validation_errors:
-        raise ValueError(
-            "Final Analytics response failed "
-            "Draft V0.1 validation: "
-            f"{validation_errors}"
+        validation_errors = validate_response(
+            final_response
         )
 
-    json.dumps(final_response)
+        if validation_errors:
+            raise ValueError(
+                "Final Analytics response failed "
+                "Draft V0.1 validation: "
+                f"{validation_errors}"
+            )
 
-    return final_response
+        json.dumps(final_response)
+
+        return final_response
+
+    except (TypeError, ValueError) as err:
+        logger.warning("Input validation failure: %s", err)
+        if not safe_mode:
+            raise
+        return build_error_response(
+            error_code="INVALID_INPUT",
+            message=str(err),
+            processed_items=len(df) if isinstance(df, pd.DataFrame) else 0,
+        )
+
+    except RuntimeError as err:
+        logger.error("Analytics execution engine error: %s", err)
+        if not safe_mode:
+            raise
+        return build_error_response(
+            error_code="ENGINE_FAILURE",
+            message=str(err),
+            processed_items=len(df) if isinstance(df, pd.DataFrame) else 0,
+        )
+
+    except Exception as err:
+        logger.critical("Unhandled unexpected error: %s", err, exc_info=True)
+        if not safe_mode:
+            raise
+        return build_error_response(
+            error_code="INTERNAL_ERROR",
+            message="An unexpected system error occurred during analytics processing.",
+            processed_items=len(df) if isinstance(df, pd.DataFrame) else 0,
+        )

@@ -28,7 +28,7 @@ model_result = {
 }
 
 
-# --- INPUT CONTEXT (as required by review) ---
+# --- INPUT CONTEXT ---
 input_context = {
     "entity_id": "sensor_node_01",
     "metrics": ["temperature"],
@@ -49,7 +49,7 @@ adapted_output = adapt_models_output(
 
 
 # --- PRINT ADAPTED OUTPUT ---
-print("\n================ ADAPTED OUTPUT (DRAFT V0.1) ================\n")
+print("\n================ ADAPTED OUTPUT ================\n")
 print(json.dumps(adapted_output, indent=4))
 
 
@@ -63,6 +63,7 @@ def print_mapping_table():
     print("\n================ FIELD MAPPING TABLE ================\n")
 
     mapping = [
+        ("N/A", "alert_type", "Hardcoded to 'POINTWISE_ANOMALY'"),
         ("model_name", "method", "Direct mapping"),
         ("timestamp", "timestamp", "Converted to ISO 8601"),
         (
@@ -93,8 +94,8 @@ def print_mapping_table():
         ),
     ]
 
-    print("| Raw Models field | Draft V0.1 field | Conversion |")
-    print("|------------------|------------------|------------|")
+    print("| Raw Models field | Target Field | Conversion |")
+    print("|------------------|--------------|------------|")
 
     for raw, target, conv in mapping:
         print(f"| {raw} | {target} | {conv} |")
