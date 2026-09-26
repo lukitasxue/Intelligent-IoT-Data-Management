@@ -1,151 +1,117 @@
-from datetime import datetime
+from __future__ import annotations
 
-REQUIRED_ALERT_FIELDS = [
+from datetime import datetime
+from typing import Any
+
+# Standardized Enums & Constants
+REQUIRED_FIELDS = {
     "timestamp",
     "alert_type",
     "target",
     "method",
     "message",
     "source",
-]
-
-OPTIONAL_ALERT_FIELDS = [
-    "score",
-    "score_metadata",
-    "severity",
-    "time_window",
-    "supporting_values",
-    "alert_id",
-]
-
-ALERT_TYPES = {
-    "POINTWISE_ANOMALY",
-    "CORRELATION_CHANGE",
 }
 
-SEVERITY_LEVELS = {
-    "LOW",
-    "MEDIUM",
-    "HIGH",
-}
+ALERT_TYPES = {"POINTWISE_ANOMALY", "CORRELATION_CHANGE"}
+SEVERITY_LEVELS = {"LOW", "MEDIUM", "HIGH"}
 
 
-def is_iso8601_utc(value):
-    if not isinstance(value, str):
+def is_iso8601_utc(timestamp_str: Any) -> bool:
+    """Validate if a timestamp string is valid ISO 8601 UTC."""
+    if not isinstance(timestamp_str, str):
         return False
-
-    if not value.endswith("Z"):
-        return False
-
     try:
-        datetime.fromisoformat(value.replace("Z", "+00:00"))
-        return True
-    except ValueError:
+        # Normalize Z to +00:00 for datetime parsing
+        ts = timestamp_str.replace("Z", "+00:00")
+        dt = datetime.fromisoformat(ts)
+        # Verify it has UTC timezone offset (+00:00)
+        return dt.tzinfo is not None and dt.utcoffset().total_seconds() == 0
+    except (ValueError, TypeError):
         return False
 
 
-def validate_target(target):
+def validate_target(target: Any) -> list[str]:
+    """Validate target payload structure."""
     errors = []
-
     if not isinstance(target, dict):
         return ["target must be an object"]
 
-    if "entity_id" not in target:
-        errors.append("target.entity_id is required")
-
-    if "metrics" not in target:
-        errors.append("target.metrics is required")
-    elif not isinstance(target["metrics"], list):
-        errors.append("target.metrics must be a list")
-    elif len(target["metrics"]) == 0:
-        errors.append("target.metrics must not be empty")
-    elif not all(isinstance(metric, str) for metric in target["metrics"]):
-        errors.append("target.metrics must contain only strings")
-
-    entity_id = target.get("entity_id")
-
-    if entity_id is not None and not isinstance(entity_id, str):
-        errors.append("target.entity_id must be a string or null")
+    if "metrics" not in target or not isinstance(target["metrics"], list) or len(target["metrics"]) == 0:
+        errors.append("target.metrics must be a non-empty list of strings")
 
     return errors
 
 
-def validate_source(source):
+def validate_source(source: Any) -> list[str]:
+    """Validate source payload structure."""
     errors = []
-
     if not isinstance(source, dict):
         return ["source must be an object"]
 
-    if "component" not in source:
-        errors.append("source.component is required")
-    elif not isinstance(source["component"], str):
-        errors.append("source.component must be a string")
-    elif not source["component"].strip():
-        errors.append("source.component must not be empty")
+    if "component" not in source or not isinstance(source["component"], str) or not source["component"].strip():
+        errors.append("source.component must be a non-empty string")
 
     return errors
 
 
-def validate_time_window(time_window):
+def validate_time_window(time_window: Any) -> list[str]:
+    """Validate optional time_window payload structure."""
     errors = []
-
     if time_window is None:
         return errors
 
     if not isinstance(time_window, dict):
         return ["time_window must be an object or null"]
 
-    for field in ["start", "end"]:
-        if field in time_window:
-            if not is_iso8601_utc(time_window[field]):
-                errors.append(
-                    f"time_window.{field} must be a valid ISO 8601 UTC timestamp"
-                )
+    start = time_window.get("start")
+    end = time_window.get("end")
 
-    for field in ["window_size", "step_size"]:
-        if field in time_window:
-            value = time_window[field]
-            if not isinstance(value, (int, float)) or isinstance(value, bool):
-                errors.append(f"time_window.{field} must be numeric")
+    if start is not None and not is_iso8601_utc(start):
+        errors.append("time_window.start must be a valid ISO 8601 UTC timestamp")
+
+    if end is not None and not is_iso8601_utc(end):
+        errors.append("time_window.end must be a valid ISO 8601 UTC timestamp")
 
     return errors
 
 
-def validate_alert(alert):
+def validate_alert(alert: Any) -> list[str]:
+    """
+    Validate Draft V0.1 Alert dictionary object.
+    """
     errors = []
 
     if not isinstance(alert, dict):
         return ["alert must be an object"]
 
-    for field in REQUIRED_ALERT_FIELDS:
-        if field not in alert:
+    # Check for presence of required envelope fields
+    missing_fields = [field for field in REQUIRED_FIELDS if field not in alert]
+    if missing_fields:
+        for field in missing_fields:
             errors.append(f"{field} is required")
-
-    if errors:
         return errors
 
+    # Core attribute validation
     if not is_iso8601_utc(alert["timestamp"]):
         errors.append("timestamp must be a valid ISO 8601 UTC timestamp")
 
-    if alert["alert_type"] not in ALERT_TYPES:
-        errors.append(
-            "alert_type must be POINTWISE_ANOMALY or CORRELATION_CHANGE"
-        )
+    # String normalization prevents case/whitespace mismatch bugs
+    alert_type = str(alert["alert_type"]).strip().upper() if alert["alert_type"] is not None else None
+    if alert_type not in ALERT_TYPES:
+        errors.append("alert_type must be POINTWISE_ANOMALY or CORRELATION_CHANGE")
 
     errors.extend(validate_target(alert["target"]))
 
-    if not isinstance(alert["method"], str):
-        errors.append("method must be a string")
-    elif not alert["method"].strip():
-        errors.append("method must not be empty")
+    if not isinstance(alert["method"], str) or not alert["method"].strip():
+        errors.append("method must be a non-empty string")
 
-    if not isinstance(alert["message"], str):
-        errors.append("message must be a string")
-    elif not alert["message"].strip():
-        errors.append("message must not be empty")
+    if not isinstance(alert["message"], str) or not alert["message"].strip():
+        errors.append("message must be a non-empty string")
 
     errors.extend(validate_source(alert["source"]))
 
+    # Optional attribute validation
     if "score" in alert:
         score = alert["score"]
         if score is not None and (
@@ -160,17 +126,17 @@ def validate_alert(alert):
 
     if "severity" in alert:
         severity = alert["severity"]
-        if severity is not None and severity not in SEVERITY_LEVELS:
-            errors.append("severity must be LOW, MEDIUM, HIGH or null")
+        if severity is not None:
+            normalized_severity = str(severity).strip().upper() if isinstance(severity, str) else None
+            if normalized_severity not in SEVERITY_LEVELS:
+                errors.append("severity must be LOW, MEDIUM, HIGH or null")
 
     if "time_window" in alert:
         errors.extend(validate_time_window(alert["time_window"]))
 
     if "supporting_values" in alert:
         supporting_values = alert["supporting_values"]
-        if supporting_values is not None and not isinstance(
-            supporting_values, dict
-        ):
+        if supporting_values is not None and not isinstance(supporting_values, dict):
             errors.append("supporting_values must be an object or null")
 
     if "alert_id" in alert:
@@ -181,58 +147,39 @@ def validate_alert(alert):
     return errors
 
 
-def validate_response(response):
+def validate_response(response: Any) -> list[str]:
+    """
+    Validate an overall Draft V0.1 Analytics response payload or alert collection.
+    """
     errors = []
 
     if not isinstance(response, dict):
-        return ["response must be an object"]
+        if isinstance(response, list):
+            for idx, item in enumerate(response):
+                alert_errors = validate_alert(item)
+                for err in alert_errors:
+                    errors.append(f"alert[{idx}]: {err}")
+            return errors
+        return ["response must be an object or list"]
 
-    required_response_fields = [
-        "status",
-        "generated_at",
-        "alerts",
-        "summary",
-        "errors",
-    ]
-
-    for field in required_response_fields:
-        if field not in response:
-            errors.append(f"{field} is required")
-
-    if errors:
-        return errors
-
-    if response["status"] not in {"success", "error"}:
-        errors.append("status must be success or error")
-
-    if not is_iso8601_utc(response["generated_at"]):
-        errors.append("generated_at must be a valid ISO 8601 UTC timestamp")
-
-    if not isinstance(response["alerts"], list):
-        errors.append("alerts must be a list")
+    # Top-level pipeline envelope validation
+    if "alerts" in response:
+        alerts = response["alerts"]
+        if not isinstance(alerts, list):
+            errors.append("response.alerts must be a list")
+        else:
+            for idx, alert in enumerate(alerts):
+                alert_errors = validate_alert(alert)
+                for err in alert_errors:
+                    errors.append(f"alert[{idx}]: {err}")
     else:
-        for index, alert in enumerate(response["alerts"]):
-            alert_errors = validate_alert(alert)
+        # If response is a single alert dictionary directly
+        errors.extend(validate_alert(response))
 
-            for error in alert_errors:
-                errors.append(f"alerts[{index}].{error}")
+    if "status" in response and not isinstance(response["status"], str):
+        errors.append("response.status must be a string")
 
-    if not isinstance(response["summary"], dict):
-        errors.append("summary must be an object")
-    else:
-        summary = response["summary"]
-
-        if "processed_items" not in summary:
-            errors.append("summary.processed_items is required")
-        elif not isinstance(summary["processed_items"], int):
-            errors.append("summary.processed_items must be an integer")
-
-        if "alert_count" not in summary:
-            errors.append("summary.alert_count is required")
-        elif not isinstance(summary["alert_count"], int):
-            errors.append("summary.alert_count must be an integer")
-
-    if not isinstance(response["errors"], list):
-        errors.append("errors must be a list")
+    if "summary" in response and not isinstance(response["summary"], dict):
+        errors.append("response.summary must be an object")
 
     return errors

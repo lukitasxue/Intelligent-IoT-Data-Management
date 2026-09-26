@@ -10,6 +10,7 @@ POST /analytics/analyze
 from __future__ import annotations
 
 import pandas as pd
+import orjson
 
 from flask import (
     Flask,
@@ -295,9 +296,24 @@ def create_app() -> Flask:
 
     @app.post("/analytics/analyze")
     def analyze():
-        payload = request.get_json(
-            silent=True
-        )
+        # Retrieve raw bytes and decode using C-level orjson parser
+        raw_data = request.get_data()
+        
+        if not raw_data:
+            return _build_error_response(
+                code="INVALID_REQUEST",
+                message="Request body must be a JSON object.",
+                http_status=400,
+            )
+
+        try:
+            payload = orjson.loads(raw_data)
+        except orjson.JSONDecodeError:
+            return _build_error_response(
+                code="INVALID_REQUEST",
+                message="Malformed JSON payload received.",
+                http_status=400,
+            )
 
         request_errors = (
             _validate_request_payload(
